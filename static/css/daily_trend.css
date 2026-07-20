@@ -1,0 +1,36 @@
+/* ———————————————————————————— */
+/* 近30天AQI/PM2.5/PM10趋势页    */
+/* 包含：.dt-control-bar 控制栏  */
+/*       (.dt-select 城市多选、  */
+/*        .dt-label 文字标签)、  */
+/*       #mainChart 趋势折线图   */
+/* ———————————————————————————— */
+
+/* Daily Trend Page Styles - Extracted from daily_trend.html inline styles */
+.dt-control-bar {
+    margin:12px 0;
+    display:flex;
+    gap:12px;
+    flex-wrap:wrap;
+    align-items:center;
+}
+.dt-select {
+    padding:6px 12px;
+    border-radius:6px;
+    border:1px solid rgba(0,0,0,0.1);
+    font-size:14px;
+    background:var(--card-bg);
+    color:var(--text-dark);
+}
+.dt-label {
+    font-size:14px;
+    font-weight:500;
+}
+.dt-label-ml {
+    font-size:14px;
+    font-weight:500;
+    margin-left:12px;
+}
+#mainChart {
+    height:480px;
+}

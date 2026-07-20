@@ -1,0 +1,72 @@
+/* ———————————————————————————— */
+/* 空气质量等级分布页样式        */
+/* 包含：.pie-chart-wrap 饼图    */
+/*       容器(左右两个ECharts)、 */
+/*       .filter-bar 城市筛选栏、*/
+/*       .city-tag 城市标签      */
+/*       (.city-tag.selected)、  */
+/*       响应式适配(600px)       */
+/* ———————————————————————————— */
+
+/* Level Distribution Styles - Extracted from level_distribution.html */
+/* Auto-generated - Do not edit inline */
+
+.pie-chart-wrap { display:inline-block; width:47%; height:380px; margin:1%; vertical-align:top; }
+    @media (max-width: 600px) {
+        .pie-chart-wrap { width:98% !important; height:280px !important; }
+    }
+    .filter-bar {
+        background: var(--card-bg);
+        border-radius: var(--radius);
+        box-shadow: var(--card-shadow);
+        padding: 16px 24px;
+        margin-bottom: 20px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 16px;
+        border: 1px solid var(--card-border);
+        backdrop-filter: blur(8px);
+    }
+    .filter-group {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+    .filter-group label {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-light);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .year-select {
+        padding: 6px 14px;
+        border-radius: 8px;
+        border: 2px solid var(--card-border);
+        font-size: 14px;
+        background: var(--card-bg);
+        color: var(--text-dark);
+        cursor: pointer;
+        outline: none;
+    }
+    .year-select:focus { border-color: var(--rain-blue); }
+    .city-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .city-tag {
+        padding: 5px 14px;
+        border-radius: 16px;
+        border: 2px solid var(--card-border);
+        background: var(--card-bg);
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 500;
+        transition: all 0.2s;
+        user-select: none;
+        backdrop-filter: blur(4px);
+    }
+    .city-tag:hover { transform: translateY(-1px); }
+    .city-tag.selected { color: white; border-color: transparent; }

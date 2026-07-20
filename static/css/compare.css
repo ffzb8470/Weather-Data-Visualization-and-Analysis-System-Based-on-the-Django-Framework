@@ -1,0 +1,118 @@
+/* ———————————————————————————— */
+/* 多城市多指标对比页样式        */
+/* 包含：.control-bar 筛选操作栏 */
+/*       (.city-tags 城市标签    */
+/*        .city-tag.selected)、  */
+/*       指标下拉选择、          */
+/*       #chartContainer 图表、  */
+/*       .legend / .legend-item  */
+/*       图例、                  */
+/*       响应式适配(600px)       */
+/* ———————————————————————————— */
+
+/* Compare Page Styles - Extracted from compare.html */
+/* Auto-generated - Do not edit inline */
+
+.control-bar {
+    background: var(--card-bg);
+    border-radius: var(--radius);
+    box-shadow: var(--card-shadow);
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+    border: 1px solid var(--card-border);
+    backdrop-filter: blur(8px);
+}
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.control-group label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-light);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.city-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.city-tag {
+    padding: 5px 14px;
+    border-radius: 16px;
+    border: 2px solid var(--card-border);
+    background: var(--card-bg);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s;
+    user-select: none;
+    backdrop-filter: blur(4px);
+}
+.city-tag:hover { transform: translateY(-1px); }
+.city-tag.selected {
+    color: white;
+    border-color: transparent;
+}
+.field-select {
+    padding: 6px 14px;
+    border-radius: 8px;
+    border: 2px solid var(--card-border);
+    font-size: 14px;
+    background: var(--card-bg);
+    color: var(--text-dark);
+    cursor: pointer;
+    outline: none;
+}
+.field-select:focus { border-color: var(--rain-blue); }
+.field-checkboxes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.field-cb {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--card-border);
+    transition: all 0.2s;
+    background: var(--card-bg);
+}
+.field-cb:hover { border-color: var(--rain-blue); }
+.field-cb input { accent-color: var(--rain-blue); }
+#chartContainer {
+    width: 100%;
+    height: 520px;
+}
+.legend-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+    margin-top: 12px;
+}
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+}
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+@media (max-width: 600px) {
+    #chartContainer { height: 360px; }
+    .control-bar { flex-direction: column; align-items: stretch; }
+}

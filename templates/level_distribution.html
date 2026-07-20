@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% block title %}空气质量等级分布饼图{% endblock %}
+{% block content %}
+{% load static %}
+    <link rel="stylesheet" href="{% static 'css/level_distribution.css' %}">
+
+<div class="page-title">空气质量等级分布</div>
+<div class="page-subtitle">按年份和城市筛选空气质量等级（优/良/轻度污染等）占比</div>
+
+<div class="stats-row">
+    <div class="stat-card">
+        <div class="stat-number" id="totalRecords">0</div>
+        <div class="stat-label">总记录数</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number" id="bestCity">-</div>
+        <div class="stat-label">优率最高城市</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number" id="worstCity">-</div>
+        <div class="stat-label">污染率最高城市</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number" id="showCityCount">0</div>
+        <div class="stat-label">显示城市</div>
+    </div>
+</div>
+
+<div class="filter-bar">
+    <div class="filter-group">
+        <label>选择年份</label>
+        <select class="year-select" id="yearSelect">
+            {% for y in available_years %}
+            <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }} 年</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="filter-group">
+        <label>选择城市（点击切换）</label>
+        <div class="city-tags" id="cityTags"></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3>各城市空气质量等级分布</h3>
+        <span class="badge" id="chartBadge">占比</span>
+    </div>
+    <div id="chart" style="text-align:center;"></div>
+</div>
+
+<div class="card">
+    <p style="font-size:14px;color:var(--text-light);">
+        数据说明：基于空气质量指数（AQI）自动评定等级，统计各等级天数占比。
+    </p>
+</div>
+
+<script>
+    var YEARLY_DATA = {{ yearly_data|safe }};
+    var CITIES = {{ cities|safe }};
+    var COLORS = {{ colors|safe }};
+    var LEVELS = {{ levels|safe }};
+
+    var selectedYear = {{ selected_year }};
+    var selectedCity = '{{ selected_city }}';
+
+    var charts = [];
+    var colorMap = {
+        '优': '#00e400', '良': '#ffff00', '轻度污染': '#ff7e00',
+        '中度污染': '#ff0000', '重度污染': '#99004c', '严重污染': '#7e0023'
+    };
+
+    // ---- 初始化城市标签 ----
+    /**
+     * 初始化城市筛选标签栏
+     * 点击城市标签切换选中的城市，重新渲染等级分布饼图
+     */
+    function initCityTags() {
+        var container = document.getElementById('cityTags');
+        container.innerHTML = '';
+        CITIES.forEach(function(city) {
+            var tag = document.createElement('span');
+            tag.className = 'city-tag' + (selectedCity === city ? ' selected' : '');
+            tag.textContent = city;
+            if (selectedCity === city) {
+                tag.style.borderColor = COLORS[city];
+                tag.style.background = COLORS[city];
+            } else {
+                tag.style.borderColor = COLORS[city];
+                tag.style.background = '';
+            }
+            tag.addEventListener('click', function() {
+                if (selectedCity === city) return; // 已选中，不做任何操作
+                selectedCity = city;
+                // 更新所有标签样式
+                container.querySelectorAll('.city-tag').forEach(function(t) {
+                    t.classList.remove('selected');
+                    t.style.background = '';
+                    t.style.borderColor = COLORS[t.textContent];
+                });
+                tag.classList.add('selected');
+                tag.style.background = COLORS[city];
+                tag.style.borderColor = COLORS[city];
+                renderCharts();
+            });
+            container.appendChild(tag);
+        });
+    }
+
+    // ---- 渲染单个城市饼图 ----
+    /**
+     * 渲染选中城市的空气质量等级分布饼图
+     * 按优良/轻度/中度/重度/严重污染分6个等级，展示天数占比
+     */
+    function renderCharts() {
+        // 清除旧图表
+        charts.forEach(function(c) { c.dispose(); });
+        charts = [];
+        document.getElementById('chart').innerHTML = '';
+
+        //年份+城市
+        var yearData = YEARLY_DATA[selectedYear] || {};
+        document.getElementById('chartBadge').textContent = selectedYear + '年 · ' + selectedCity;
+
+        var div = document.createElement('div');
+        div.className = 'pie-chart-wrap';
+        document.getElementById('chart').appendChild(div);
+
+        var c = echarts.init(div);
+        charts.push(c);
+
+        var levelArr = yearData[selectedCity] || [0,0,0,0,0,0];
+        var total = levelArr.reduce(function(a,b){return a+b;}, 0);
+        var dataItems = LEVELS.map(function(l, i) {
+            return { name: l, value: levelArr[i] };
+        }).filter(function(d) { return d.value > 0; });
+
+        if (dataItems.length === 0) {
+            dataItems = [{name: '无数据', value: 1, itemStyle: {color: '#ddd'}}];
+        }
+
+        var C2 = getChartColors();
+        c.setOption({
+            title: {
+                text: selectedCity,
+                left: 'center',
+                textStyle: { fontSize: 16, fontWeight: 'bold', color: C2.text }
+            },
+            tooltip: {
+                trigger: 'item',
+                backgroundColor: C2.tooltipBg,
+                borderColor: C2.tooltipBorder,
+                formatter: function(p) {
+                    return '<b>' + p.name + '</b><br/>天数: ' + p.value + '天<br/>占比: ' + p.percent.toFixed(1) + '%';
+                }
+            },
+            series: [{
+                type: 'pie',
+                radius: ['38%', '70%'],
+                center: ['50%', '55%'],
+                data: dataItems,
+                label: {
+                    formatter: '{b}: {d}%',
+                    fontSize: 12,
+                    color: C2.text
+                },
+                emphasis: {
+                    itemStyle: {
+                        shadowBlur: 10,
+                        shadowOffsetX: 0,
+                        shadowColor: C2.text
+                    }
+                },
+                itemStyle: {
+                    color: function(p) { return colorMap[p.name] || '#999'; }
+                }
+            }]
+        });
+
+        updateStats(yearData);
+    }
+
+    // ---- 更新统计卡片（基于全部城市） ----
+    /**
+     * 更新顶部统计卡片（基于全部城市当前年份数据）
+     * 统计总记录数、优率最高城市、污染率最高城市
+     * @param {object} yearData - 某年各城市的等级计数数据
+     */
+    function updateStats(yearData) {
+        var total = 0;
+        var bestCity = '', bestRatio = 0;
+        var worstCity = '', worstRatio = 1;
+
+        CITIES.forEach(function(city) {
+            var arr = yearData[city] || [0,0,0,0,0,0];
+            var t = arr.reduce(function(a,b){return a+b;}, 0);
+            total += t;
+            if (t > 0) {
+                var good = (arr[0] + arr[1]) / t;
+                if (good > bestRatio) { bestRatio = good; bestCity = city; }
+                if (good < worstRatio) { worstRatio = good; worstCity = city; }
+            }
+        });
+
+        document.getElementById('totalRecords').textContent = total;
+        document.getElementById('bestCity').textContent = bestCity || '-';
+        document.getElementById('worstCity').textContent = worstCity || '-';
+        document.getElementById('showCityCount').textContent = CITIES.length;
+    }
+
+    // ---- 事件绑定 ----
+    document.getElementById('yearSelect').addEventListener('change', function() {
+        selectedYear = parseInt(this.value);
+        renderCharts();
+    });
+
+    // ---- 启动 ----
+    initCityTags();
+    renderCharts();
+
+    window.addEventListener('resize', function() { charts.forEach(function(c) { c.resize(); }); });
+    /**
+     * 主题切换时清除旧图表并重新渲染
+     */
+    window.refreshCharts = function() {
+        charts.forEach(function(c) { echarts.dispose(c); });
+        charts = [];
+        renderCharts();
+    };
+</script>
+{% endblock %}

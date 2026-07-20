@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - 空气质量分析系统</title>
+{% load static %}
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6/css/all.min.css">
+        <link rel="stylesheet" href="{% static 'css/auth.css' %}">
+</head>
+<body>
+    <div class="auth-card">
+        <div class="logo"><i class="fas fa-leaf"></i></div>
+        <h2>欢迎回来</h2>
+        <p class="subtitle">登录空气质量分析系统</p>
+
+        {% if error %}
+        <div class="error-msg">{{ error }}</div>
+        {% endif %}
+
+        <form method="post" action="/login/">
+            {% csrf_token %}
+            <div class="form-group">
+                <label>用户名</label>
+                <input type="text" name="user" placeholder="请输入用户名" required autocomplete="username">
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="password" name="pwd" placeholder="请输入密码" required autocomplete="current-password">
+            </div>
+            <button type="submit" class="btn-auth">登 录</button>
+        </form>
+
+        <div class="auth-footer">
+            还没有账号？<a href="/reg/">立即注册</a>
+        </div>
+    </div>
+</body>
+</html>

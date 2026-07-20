@@ -1,0 +1,417 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}空气质量卡片{% endblock %}
+
+{% block content %}
+<div class="page-title">城市空气质量卡片</div>
+<div class="page-subtitle">点击城市卡片查看完整数据 · 其他卡片自动缩小</div>
+
+    <link rel="stylesheet" href="{% static 'css/index.css' %}">
+
+<div class="city-grid" id="cityGrid"></div>
+
+<script>
+const CITIES = {{ cities|safe }};
+const COLORS = {{ colors|safe }};
+const DAILY_DATA = {{ daily_data|safe }};
+const LATEST_DATA = {{ latest_json|safe }};
+let expandedCity = null;
+
+const CHN_LEVEL = {
+    '优':           { text:'优',           cls:'#00e400' },
+    '良':           { text:'良',           cls:'#ffff00', tc:'#333' },
+    '轻度污染':     { text:'轻度污染',     cls:'#ff7e00' },
+    '中度污染':     { text:'中度污染',     cls:'#ff0000' },
+    '重度污染':     { text:'重度污染',     cls:'#99004c' },
+    '严重污染':     { text:'严重污染',     cls:'#7e0023' },
+};
+
+/**
+ * 根据 AQI 数值或等级代码获取空气质量等级信息
+ * 返回等级名称、CSS类名、颜色、文本颜色
+ * @param {number} aqi - AQI 指数
+ * @param {string} [levelCode] - 等级代码（优/良/轻度污染/中度污染/重度污染/严重污染）
+ * @returns {Object} { text, cls, color, tc? }
+ */
+function getQuality(aqi, levelCode) {
+    if (levelCode && CHN_LEVEL[levelCode]) {
+        return { ...CHN_LEVEL[levelCode] };
+    }
+    if (aqi == null) return {text:'无数据', cls:'#999'};
+    if (aqi <= 50) return {text:'优', cls:'#00e400'};
+    if (aqi <= 100) return {text:'良', cls:'#ffff00', tc:'#333'};
+    if (aqi <= 150) return {text:'轻度污染', cls:'#ff7e00'};
+    if (aqi <= 200) return {text:'中度污染', cls:'#ff0000'};
+    if (aqi <= 300) return {text:'重度污染', cls:'#99004c'};
+    return {text:'严重污染', cls:'#7e0023'};
+}
+/**
+ * 将十六进制颜色调暗指定量
+ * 用于生成卡片渐变的深色端
+ * @param {string} hex - 六位十六进制颜色值
+ * @param {number} amt - 调暗量（0-255）
+ * @returns {string} 调暗后的十六进制颜色
+ */
+function darken(hex, amt) {
+    let c = parseInt(hex.replace('#',''), 16);
+    let r = Math.max((c>>16)-amt, 0);
+    let g = Math.max(((c>>8)&0xff)-amt, 0);
+    let b = Math.max((c&0xff)-amt, 0);
+    return `rgb(${r},${g},${b})`;
+}
+
+/**
+ * 渲染普通尺寸的城市卡片（首页默认视图）
+ * 包含 AQI 环形进度、空气质量等级标签、6项污染物数值
+ * @param {string} city - 城市名
+ * @param {object} rec - 最新空气质量记录
+ * @param {string} color - 主题色
+ * @returns {HTMLElement} 卡片 DOM 元素
+ */
+function renderNormalCard(city, rec, color) {
+    const aqi = rec.aqi != null ? rec.aqi : '--';
+    const q = getQuality(aqi, rec.quality_level);
+    const dark = darken(color, 40);
+    const fields = [
+        {f:'pm25',l:'PM2.5 (μg/m³)'},{f:'pm10',l:'PM10 (μg/m³)'},
+    ];
+    let pollHtml = fields.map(f => `
+        <div class="p-item">
+            <span class="p-label">${f.l}</span>
+            <span class="p-value">${rec[f.f] != null ? rec[f.f] : '--'}</span>
+        </div>
+    `).join('');
+
+    const card = document.createElement('div');
+    card.className = 'city-card card-enter';
+    card.dataset.city = city;
+    card.innerHTML = `
+        <div class="card-top" style="background:linear-gradient(135deg,${color},${dark})">
+            <div class="city-name">${city} <span class="date-badge">${rec.date || ''}</span></div>
+        </div>
+        <div class="card-body">
+            <div class="aqi-ring" style="background:radial-gradient(circle at 30% 30%,${color}88,${dark})">
+                <span class="aqi-num">${aqi}</span>
+                <span class="aqi-unit">AQI</span>
+            </div>
+            <span class="quality-tag" style="background:${q.cls};${q.tc ? 'color:'+q.tc : ''}">${q.text}</span>
+            <div class="pollutants">${pollHtml}</div>
+        </div>
+    `;
+    card.addEventListener('click', () => expandCity(city));
+    return card;
+}
+
+/**
+ * 渲染缩小版城市卡片（展开状态下的次要城市）
+ * 仅显示 AQI 圆环和城市名，点击可展开该城市
+ * @param {string} city - 城市名
+ * @param {object} rec - 最新空气质量记录
+ * @param {string} color - 主题色
+ * @returns {HTMLElement} 卡片 DOM 元素
+ */
+function renderMinimizedCard(city, rec, color) {
+    const aqi = rec.aqi != null ? rec.aqi : '--';
+    const dark = darken(color, 40);
+    const card = document.createElement('div');
+    card.className = 'city-card minimized card-enter';
+    card.dataset.city = city;
+    card.innerHTML = `
+        <div class="aqi-ring" style="background:radial-gradient(circle at 30% 30%,${color}88,${dark})">
+            <span class="aqi-num">${aqi}</span>
+        </div>
+        <div class="city-name">${city}</div>
+    `;
+    card.addEventListener('click', () => expandCity(city));
+    return card;
+}
+
+/**
+ * 渲染展开版城市卡片（选中城市详情视图）
+ * 包含大 AQI 环形、污染物列表、近30天/污染物占比选项卡切换
+ * @param {string} city - 城市名
+ * @param {object} rec - 最新空气质量记录
+ * @param {string} color - 主题色
+ * @returns {HTMLElement} 卡片 DOM 元素
+ */
+function renderExpandedCard(city, rec, color) {
+    const aqi = rec.aqi != null ? rec.aqi : '--';
+    const q = getQuality(aqi, rec.quality_level);
+    const dark = darken(color, 40);
+    const fields = [
+        {f:'pm25',l:'PM2.5 (μg/m³)'},{f:'pm10',l:'PM10 (μg/m³)'},
+        {f:'no2',l:'NO₂ (μg/m³)'},{f:'so2',l:'SO₂ (μg/m³)'},
+        {f:'co',l:'CO (mg/m³)'},{f:'o3',l:'O₃ (μg/m³)'}
+    ];
+    let pollHtml = fields.map(f => `
+        <div class="p-item">
+            <span class="p-label">${f.l}</span>
+            <span class="p-value">${rec[f.f] != null ? rec[f.f] : '--'}</span>
+        </div>
+    `).join('');
+
+    const card = document.createElement('div');
+    card.className = 'city-card expanded card-enter';
+    card.dataset.city = city;
+    card.innerHTML = `
+        <button class="close-btn">✕</button>
+        <div class="card-top" style="background:linear-gradient(135deg,${color},${dark})">
+            <div class="city-name">${city} <span class="date-badge">${rec.date || ''}</span></div>
+        </div>
+        <div class="card-body">
+            <div class="left-col">
+                <div class="aqi-ring" style="background:radial-gradient(circle at 30% 30%,${color}88,${dark})">
+                    <span class="aqi-num">${aqi}</span>
+                    <span class="aqi-unit">AQI</span>
+                </div>
+                <span class="quality-tag" style="background:${q.cls};${q.tc ? 'color:'+q.tc : ''}">${q.text}</span>
+                <div class="pollutants">${pollHtml}</div>
+                <div style="margin-top:10px;display:flex;gap:8px;">
+                    <button class="tab-btn active" data-tab="daily-${city}">近30天</button>
+                    <button class="tab-btn" data-tab="pie-${city}">污染物占比</button>
+                </div>
+            </div>
+            <div style="position:relative;">
+                <div class="chart-container-sm" id="daily-${city}"></div>
+                <div class="chart-container-sm" id="pie-${city}" style="display:none;"></div>
+            </div>
+        </div>
+    `;
+
+    card.querySelector('.close-btn').addEventListener('click', (e) => {
+        e.stopPropagation();   
+        resetToNormal();
+    });
+
+    card.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const tab = btn.dataset.tab;
+            card.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            card.querySelectorAll('.chart-container-sm').forEach(el => el.style.display = 'none');
+            document.getElementById(tab).style.display = '';
+            if (tab.startsWith('daily-')) drawDailyChart(city);
+            else if (tab.startsWith('pie-')) drawPieChart(city);
+        });
+    });
+
+    return card;
+}
+
+/**
+ * 展开选中城市卡片，使用 FLIP 动画过渡
+ * 选中卡片展开为全尺寸详情视图，其余卡片缩小排列在下方
+ * @param {string} city - 要展开的城市名
+ */
+function expandCity(city) {
+    expandedCity = city;
+    const grid = document.getElementById('cityGrid');
+
+    const oldCard = document.querySelector(`.city-card[data-city="${city}"]`);
+    const oldRect = oldCard ? oldCard.getBoundingClientRect() : null;
+
+    grid.classList.add('expanded');
+
+    grid.innerHTML = '';
+
+    const rec = LATEST_DATA[city] || {};
+    const color = COLORS[city] || '#37A2DA';
+    const expandedCard = renderExpandedCard(city, rec, color);
+    grid.appendChild(expandedCard);
+
+    CITIES.forEach((c, i) => {
+        if (c === city) return;
+        const rec2 = LATEST_DATA[c] || {};
+        const color2 = COLORS[c] || '#37A2DA';
+        const card = renderMinimizedCard(c, rec2, color2);
+        card.style.opacity = '0';
+        card.style.transform = 'translateY(24px)';
+        card.style.transition = 'none';
+        grid.appendChild(card);
+    });
+
+    requestAnimationFrame(() => {
+        const newRect = expandedCard.getBoundingClientRect();
+
+        if (oldRect) {
+            const dx = oldRect.left - newRect.left;
+            const dy = oldRect.top - newRect.top;
+            const sx = oldRect.width / newRect.width;
+            const sy = oldRect.height / newRect.height;
+
+            expandedCard.style.transformOrigin = 'top left';
+            expandedCard.style.transform = `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`;
+            expandedCard.style.transition = 'none';
+            expandedCard.style.opacity = '1';
+        }
+
+        requestAnimationFrame(() => {
+            if (oldRect) {
+                expandedCard.style.transition = 'all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)';
+                expandedCard.style.transform = '';
+                expandedCard.style.opacity = '1';
+            }
+
+            CITIES.forEach((c, i) => {
+                if (c === city) return;
+                const card = grid.querySelector(`.city-card[data-city="${c}"]`);
+                if (!card) return;
+                card.style.transition = `all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) ${0.1 + i * 0.05}s`;
+                card.style.opacity = '1';
+                card.style.transform = '';
+            });
+
+            setTimeout(() => drawDailyChart(city), 50);
+        });
+    });
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/**
+ * 重置所有城市卡片为普通视图
+ * 关闭展开状态，重新初始化卡片
+ */
+function resetToNormal() {
+    const grid = document.getElementById('cityGrid');
+    grid.classList.remove('expanded');
+    grid.innerHTML = '';
+    initDashboard();
+}
+
+/**
+ * 初始化首页卡片
+ * 为所有城市渲染普通尺寸卡片，展示最新空气质量概况
+ */
+function initDashboard() {
+    const grid = document.getElementById('cityGrid');
+    grid.innerHTML = '';
+    CITIES.forEach(city => {
+        const rec = LATEST_DATA[city] || {};
+        const color = COLORS[city] || '#37A2DA';
+        const card = renderNormalCard(city, rec, color);
+        grid.appendChild(card);
+    });
+}
+
+/**
+ * 绘制城市近30天 AQI 趋势折线图（带面积渐变填充）
+ * 使用 ECharts 渲染在展开卡片的容器中
+ * @param {string} city - 城市名
+ */
+function drawDailyChart(city) {
+    const container = document.getElementById('daily-' + city);
+    if (!container) return;
+
+    let chart = echarts.getInstanceByDom(container);
+    if (!chart) chart = echarts.init(container);
+
+    const daily = DAILY_DATA[city] || {};
+    const dates = Object.keys(daily);
+    const aqiData = dates.map(d => daily[d].aqi);
+
+    const C2 = getChartColors();
+    chart.setOption({
+        tooltip: { trigger: 'axis' },
+        grid: { left: 35, right: 8, top: 10, bottom: 20 },
+        xAxis: {
+            type: 'category',
+            data: dates,
+            axisLabel: { fontSize: 9, rotate: 30, interval: Math.max(1, Math.floor(dates.length / 15)), color: C2.subText },
+            axisLine: { lineStyle: { color: C2.splitLine } }
+        },
+        yAxis: {
+            type: 'value',
+            splitLine: { lineStyle: { type: 'dashed', color: C2.splitLine } }
+        },
+        series: [{
+            type: 'line',
+            smooth: true,
+            data: aqiData,
+            lineStyle: { width: 2, color: COLORS[city] || '#37A2DA' },
+            areaStyle: {
+                color: {
+                    type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+                    colorStops: [
+                        { offset: 0, color: (COLORS[city] || '#37A2DA') + '88' },
+                        { offset: 1, color: (COLORS[city] || '#37A2DA') + '11' }
+                    ]
+                }
+            },
+            symbol: 'none',
+        }]
+    });
+    chart.resize();
+}
+
+/**
+ * 绘制城市污染物浓度占比环形饼图
+ * 显示 PM2.5、PM10、NO₂、SO₂、CO、O₃ 在当前记录中的相对占比
+ * @param {string} city - 城市名
+ */
+function drawPieChart(city) {
+    const container = document.getElementById('pie-' + city);
+    if (!container) return;
+
+    let chart = echarts.getInstanceByDom(container);
+    if (!chart) chart = echarts.init(container);
+
+    const rec = LATEST_DATA[city] || {};
+    const fields = [
+        { name: 'PM2.5', value: rec.pm25 },
+        { name: 'PM10', value: rec.pm10 },
+        { name: 'NO₂', value: rec.no2 },
+        { name: 'SO₂', value: rec.so2 },
+        { name: 'CO', value: rec.co != null ? rec.co * 1000 : null },
+        { name: 'O₃', value: rec.o3 }
+    ];
+    const pieData = fields.filter(f => f.value != null && f.value > 0);
+    if (pieData.length === 0) return;
+
+    const C2 = getChartColors();
+    chart.setOption({
+        tooltip: {
+            trigger: 'item',
+            formatter: '{b}: {c} μg/m³ ({d}%)'
+        },
+        series: [{
+            type: 'pie',
+            radius: ['30%', '70%'],
+            center: ['50%', '50%'],
+            data: pieData.map(f => ({
+                name: f.name,
+                value: f.value
+            })),
+            label: {
+                show: true,
+                formatter: '{b}\n{d}%',
+                fontSize: 10,
+                color: C2.text
+            },
+            emphasis: {
+                itemStyle: {
+                    shadowBlur: 10,
+                    shadowOffsetX: 0,
+                    shadowColor: C2.text
+                }
+            }
+        }]
+    });
+    chart.resize();
+}
+
+initDashboard();
+/**
+ * 主题切换时刷新展开卡片的图表
+ * 重新绘制已展开城市的折线图和饼图
+ */
+window.refreshCharts = function() {
+    if (expandedCity) {
+        drawDailyChart(expandedCity);
+        drawPieChart(expandedCity);
+    }
+};
+
+</script>
+{% endblock %}

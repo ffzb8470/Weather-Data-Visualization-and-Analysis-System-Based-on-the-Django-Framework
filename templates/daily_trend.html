@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}逐日趋势分析{% endblock %}
+{% block content %}
+<div class="page-title">逐日趋势分析</div>
+<div class="page-subtitle">近30天各城市 AQI、PM2.5、PM10 逐日变化趋势</div>
+
+{% load static %}
+    <link rel="stylesheet" href="{% static 'css/daily_trend.css' %}">
+<div class="card">
+    <div class="card-header">
+        <h3>多城市趋势对比</h3>
+        <span class="badge">AQI / PM2.5 / PM10</span>
+    </div>
+    <div class="dt-control-bar">
+        <label class="dt-label">切换指标：</label>
+        <select id="fieldSelect" class="dt-select">
+            <option value="aqi">AQI 指数</option>
+            <option value="pm25">PM2.5 (μg/m³)</option>
+            <option value="pm10">PM10 (μg/m³)</option>
+        </select>
+        <label class="dt-label-ml">筛选城市：</label>
+        <select id="citySelect" class="dt-select">
+            <option value="all">全部城市</option>
+        </select>
+    </div>
+    <div id="mainChart" class="dt-main-chart"></div>
+</div>
+
+<div class="card">
+    <p class="dt-note">
+        数据说明：展示近30天各城市空气质量数据逐日变化趋势，可切换不同污染物指标。
+    </p>
+</div>
+
+<script>
+    var dates = {{ dates|safe }};
+    var dataRaw = {{ data_raw|safe }};
+    var cities = {{ cities|safe }};
+    var colorMap = {{ colors|safe }};
+
+    var chart = echarts.init(document.getElementById('mainChart'));
+
+    // 填充城市选择器
+    var citySel = document.getElementById('citySelect');
+    cities.forEach(function(c) {
+        var opt = document.createElement('option');
+        opt.value = c;
+        opt.textContent = c;
+        citySel.appendChild(opt);
+    });
+
+    /**
+     * 获取指定指标和城市/全部城市的折线图系列数据
+     * 遍历所有日期，按城市分组返回 ECharts 系列配置
+     * @param {string} field - 指标字段（aqi/pm25/pm10）
+     * @param {string} cityFilter - 城市筛选（all 或城市名）
+     * @returns {Array} ECharts 系列数组
+     */
+    function getFieldData(field, cityFilter) {
+        var series = [];
+        var targetCities = (cityFilter === 'all') ? cities : [cityFilter];
+        targetCities.forEach(function(city) {
+            var raw = dataRaw[city] || [];
+            var values = raw.map(function(d) { return d[field] == null ? '-' : d[field]; });
+            series.push({
+                name: city,
+                type: 'line',
+                smooth: true,
+                symbol: 'circle',
+                symbolSize: 4,
+                data: values,
+                lineStyle: { width: 2 },
+                itemStyle: { color: colorMap[city] || '#37A2DA' }
+            });
+        });
+        return series;
+    }
+
+    /**
+     * 渲染逐日趋势折线图
+     * 支持切换指标（AQI/PM2.5/PM10）和城市筛选（单城市/全部）
+     * 含可拖拽数据缩放器（dataZoom）
+     */
+    function renderChart() {
+        var field = document.getElementById('fieldSelect').value;
+        var cityFilter = document.getElementById('citySelect').value;
+
+        var fieldNames = { aqi: 'AQI', pm25: 'PM2.5 (μg/m³)', pm10: 'PM10 (μg/m³)' };
+        var series = getFieldData(field, cityFilter);
+
+        var C = getChartColors();
+        chart.setOption({
+            tooltip: {
+                trigger: 'axis',
+                formatter: function(params) {
+                    var s = '<b>' + params[0].axisValue + '</b><br/>';
+                    params.forEach(function(p) {
+                        s += '<span style="color:' + p.color + '">●</span> ' + p.seriesName + ': ' + (p.value === '-' ? '无数据' : p.value) + '<br/>';
+                    });
+                    return s;
+                }
+            },
+            legend: {
+                data: (cityFilter === 'all') ? cities : [cityFilter],
+                top: 36,
+                type: 'scroll',
+                textStyle: { color: C.text }
+            },
+            grid: {
+                left: '3%',
+                right: '4%',
+                bottom: '3%',
+                top: '80px',
+                containLabel: true
+            },
+            xAxis: {
+                type: 'category',
+                data: dates,
+                axisLabel: { rotate: 45, fontSize: 11, interval: Math.max(1, Math.floor(dates.length / 15)), color: C.subText },
+                axisLine: { lineStyle: { color: C.splitLine } }
+            },
+            yAxis: {
+                type: 'value',
+                name: fieldNames[field] || field,
+                nameLocation: 'middle',
+                nameGap: 50,
+                nameTextStyle: { color: C.text },
+                splitLine: { lineStyle: { type: 'dashed', color: C.splitLine } }
+            },
+            dataZoom: [
+                { type: 'inside', start: 0, end: 100 },
+                { type: 'slider', start: 0, end: 100, height: 20, bottom: 0 }
+            ],
+            series: series
+        }, true);
+    }
+
+    document.getElementById('fieldSelect').addEventListener('change', renderChart);
+    document.getElementById('citySelect').addEventListener('change', renderChart);
+
+    renderChart();
+
+    window.addEventListener('resize', function() { chart.resize(); });
+    window.refreshCharts = renderChart;
+</script>
+{% endblock %}

@@ -1,0 +1,198 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}城市对比分析{% endblock %}
+
+{% block content %}
+<div class="page-title">多城市多指标对比</div>
+<div class="page-subtitle">选择城市和指标，查看趋势对比</div>
+
+    <link rel="stylesheet" href="{% static 'css/compare.css' %}">
+
+<div class="control-bar">
+    <div class="control-group">
+        <label>选择城市（点击切换）</label>
+        <div class="city-tags" id="cityTags"></div>
+    </div>
+    <div class="control-group">
+        <label>选择指标（可多选）</label>
+        <div class="field-checkboxes" id="fieldCheckboxes">
+            {% for key, name in pollutant_names.items %}
+            <label class="field-cb">
+                <input type="checkbox" value="{{ key }}" {% if key == selected_field %}checked{% endif %}>
+                {{ name }}
+            </label>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 id="chartTitle">{{ field_label }}趋势对比</h3>
+        <span class="badge" id="cityCount">{{ selected_cities|length }} 城市</span>
+    </div>
+    <div id="chartContainer"></div>
+    <div class="legend-row" id="legendRow"></div>
+</div>
+
+<script>
+const CITIES = {{ cities|safe }};
+const COLORS = {{ colors_json|safe }};
+const ALL_DATA = {{ data|safe }};
+const POLLUTANT_NAMES = {{ pollutant_names|safe }};
+
+let selectedCities = {{ selected_cities|safe }};
+let chart = null;
+let selectedFields = new Set(['{{ selected_field }}']);
+
+const LINE_STYLES = ['solid', 'dashed', 'dotted', 'dashdot'];
+const FIELD_LINE_STYLES = {};
+
+/**
+ * 初始化城市标签（点击切换）和指标多选框（可多选）
+ * 每个指标分配不同线型（实线/虚线/点线）以示区分
+ */
+function initControls() {
+    const tagsContainer = document.getElementById('cityTags');
+    tagsContainer.innerHTML = '';
+    CITIES.forEach(city => {
+        const tag = document.createElement('span');
+        tag.className = 'city-tag' + (selectedCities.includes(city) ? ' selected' : '');
+        tag.textContent = city;
+        tag.style.borderColor = COLORS[city];
+        if (selectedCities.includes(city)) tag.style.background = COLORS[city];
+        tag.addEventListener('click', () => {
+            const idx = selectedCities.indexOf(city);
+            if (idx >= 0) {
+                if (selectedCities.length <= 1) return;
+                selectedCities.splice(idx, 1);
+                tag.classList.remove('selected');
+                tag.style.background = '';
+                tag.style.borderColor = COLORS[city];
+            } else {
+                selectedCities.push(city);
+                tag.classList.add('selected');
+                tag.style.background = COLORS[city];
+                tag.style.borderColor = COLORS[city];
+            }
+            loadChart();
+        });
+        tagsContainer.appendChild(tag);
+    });
+
+    const fieldBoxes = document.querySelectorAll('#fieldCheckboxes input[type="checkbox"]');
+    fieldBoxes.forEach(cb => {
+        const idx = Array.from(fieldBoxes).indexOf(cb);
+        FIELD_LINE_STYLES[cb.value] = LINE_STYLES[idx % LINE_STYLES.length];
+
+        cb.addEventListener('change', () => {
+            if (cb.checked) {
+                selectedFields.add(cb.value);
+            } else {
+                if (selectedFields.size <= 1) { cb.checked = true; return; }
+                selectedFields.delete(cb.value);
+            }
+            loadChart();
+        });
+    });
+}
+
+/**
+ * 加载并渲染多城市多指标对比趋势图
+ * 支持多城市、多指标（各配不同线型），含可拖拽缩放器和自定义图例
+ */
+function loadChart() {
+    const fields = Array.from(selectedFields);
+    if (fields.length === 0) return;
+
+    const titleParts = fields.map(f => POLLUTANT_NAMES[f] || f);
+    document.getElementById('chartTitle').textContent = titleParts.join(' / ') + ' 趋势对比';
+    document.getElementById('cityCount').textContent = selectedCities.length + ' 城市';
+
+    if (!chart) {
+        chart = echarts.init(document.getElementById('chartContainer'));
+    }
+
+    const allDates = new Set();
+    selectedCities.forEach(city => {
+        const cityRecords = ALL_DATA[city] || {};
+        Object.keys(cityRecords).forEach(date => allDates.add(date));
+    });
+    const sortedDates = Array.from(allDates).sort();
+    const series = [];
+
+    selectedCities.forEach(city => {
+        const cityData = ALL_DATA[city] || {};
+        fields.forEach((field, fi) => {
+            const lineStyle = FIELD_LINE_STYLES[field] || 'solid';
+            const name = city + ' - ' + (POLLUTANT_NAMES[field] || field);
+            series.push({
+                name: name,
+                type: 'line',
+                smooth: true,
+                data: sortedDates.map(d => {
+                    const rec = cityData[d];
+                    return rec != null && rec[field] != null ? rec[field] : null;
+                }),
+                lineStyle: {
+                    width: 2.5,
+                    color: COLORS[city],
+                    type: lineStyle,
+                },
+                itemStyle: { color: COLORS[city] },
+                symbol: 'circle',
+                symbolSize: 4,
+                connectNulls: true,
+                emphasis: { focus: 'series' },
+            });
+        });
+    });
+
+    const C = getChartColors();
+    const option = {
+        tooltip: {
+            trigger: 'axis',
+            formatter: function(params) {
+                if (!params || params.length === 0) return '';
+                let html = `<b>${params[0].axisValue}</b><br/>`;
+                params.forEach(p => {
+                    html += `<span style="color:${p.color}">●</span> ${p.seriesName}: <b>${p.value != null ? p.value : '无数据'}</b><br/>`;
+                });
+                return html;
+            }
+        },
+        legend: {
+            type: 'scroll',
+            top: 0,
+            textStyle: { fontSize: 12, color: C.text },
+        },
+        grid: { top: 50, right: 20, bottom: 60, left: 60 },
+        xAxis: {
+            type: 'category',
+            data: sortedDates,
+            axisLabel: { rotate: 45, fontSize: 11, hideOverlap: true, interval: Math.max(1, Math.floor(sortedDates.length / 15)), color: C.subText },
+            axisLine: { lineStyle: { color: C.splitLine } },
+            boundaryGap: false,
+        },
+        yAxis: {
+            type: 'value',
+            name: fields.map(f => POLLUTANT_NAMES[f] || f).join(' / '),
+            nameTextStyle: { fontSize: 12, color: C.text },
+            splitLine: { lineStyle: { type: 'dashed', color: C.splitLine } },
+        },
+        dataZoom: [
+            { type: 'inside', start: 0, end: 100 },
+            { type: 'slider', start: 0, end: 100, height: 24, bottom: 8 },
+        ],
+        series: series,
+    };
+
+    chart.setOption(option, true);
+
+}
+
+initControls();
+loadChart();
+window.refreshCharts = loadChart;
+</script>
+{% endblock %}

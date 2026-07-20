@@ -1,0 +1,16 @@
+# 数据库文件（运行时生成）
+db.sqlite3
+*.sqlite3
+
+# 爬取数据缓存
+get_data/data/*.csv
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+
+# 临时文件
+*.log
