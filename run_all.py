@@ -5,7 +5,7 @@ import os, sys
 
 # 设置 Django 环境
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'untitled.settings')
-project_root = r'D:\新建文件夹\毕业\毕设'
+project_root = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, project_root)
 
 import django

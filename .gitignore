@@ -5,6 +5,10 @@ db.sqlite3
 # 爬取数据缓存
 get_data/data/*.csv
 
+# 虚拟环境
+venv/
+.venv/
+
 # Python 缓存
 __pycache__/
 *.pyc
@@ -14,3 +18,7 @@ __pycache__/
 
 # 临时文件
 *.log
+pdf_out.txt
+
+# 本地配置文件（含数据库密码等敏感信息）
+settings_local.py

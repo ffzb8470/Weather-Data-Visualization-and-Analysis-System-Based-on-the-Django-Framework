@@ -62,7 +62,7 @@ logger = logging.getLogger(__name__)
 
 def _get_crawl_fn():
     """动态导入爬虫函数（避免启动时依赖未就绪）"""
-    sys.path.insert(0, r'D:\新建文件夹\毕业\毕设\get_data')
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'get_data'))
     from weather_spider import crawl_city_range  
     return crawl_city_range
 
